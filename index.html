@@ -582,6 +582,7 @@ html[data-appearance="dark"] .ov-tile-num{color:var(--gold)}
   font-size:12px; font-weight:700; letter-spacing:.16em; box-shadow:0 2px 14px rgba(11,56,59,.28);
 }
 #demoBanner .demo-label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
+#demoBanner .demo-label-short{ display:none; white-space:nowrap }
 #demoBanner a{ color:#C7A15C; text-decoration:none; font-weight:800; white-space:nowrap; letter-spacing:.1em }
 #demoBanner a:hover{ text-decoration:underline }
 #demoBanner a.demo-cta-short{ display:none }
@@ -611,6 +612,13 @@ html.demo-off .app{ min-height:100vh; min-height:100dvh }
   #demoBanner a.demo-cta-long{ display:none }
   #demoBanner a.demo-cta-short{ display:inline }
   #demoBanner .demo-label-tail{ display:none }
+  /* 2026-10-30 banner fix, part 2: the CTA swap alone was not enough — the
+     remaining label text ("INTERACTIVE DEMO — try the demo month free")
+     still measures ~299px against ~274px available at 390px, so it kept
+     truncating. On phones the long label hides entirely and a short label
+     shows, so the banner reads in full at any phone width. */
+  #demoBanner .demo-label{ display:none }
+  #demoBanner .demo-label-short{ display:inline }
 }
 </style>
 <script>
@@ -627,6 +635,7 @@ window.addEventListener('appinstalled', function(){ window.__fedorianInstallProm
 <body>
 <div id="demoBanner" role="note">
   <span class="demo-label">INTERACTIVE DEMO — try the demo month free<span class="demo-label-tail"> · Full version: Jan 2026 – Dec 2027</span></span>
+  <span class="demo-label-short">DEMO — try it free</span>
   <a class="demo-cta-long" href="https://www.etsy.com/shop/FedorianStudio" target="_blank" rel="noopener">Get the full all-in-one life planner on Etsy →</a>
   <a class="demo-cta-short" href="https://www.etsy.com/shop/FedorianStudio" target="_blank" rel="noopener">Etsy →</a>
   <button class="demo-x" id="demoBannerX" type="button" aria-label="Dismiss demo banner">×</button>
@@ -1623,13 +1632,13 @@ function renderJournal(){
 
 
 /* ---------------- View: Overview (quick read) ---------------- */
-function ovDonut(done, total, fillClass, big, small){
+function ovDonut(done, total, fillClass, big, small, aria){
   const C = 326.73;
   const pct = total > 0 ? done / total : 0;
   const filled = (pct * C).toFixed(1);
   const strokeClass = fillClass.replace('ov-fill-', 'ov-stroke-');
   const arc = pct > 0 ? `<circle cx="70" cy="70" r="52" fill="none" class="${strokeClass}" stroke-width="16" stroke-dasharray="${filled} ${C}" transform="rotate(-90 70 70)" stroke-linecap="round"/>` : '';
-  return `<svg class="ov-donut" viewBox="0 0 140 140" role="img" aria-label="${big} ${small}">
+  return `<svg class="ov-donut" viewBox="0 0 140 140" role="img" aria-label="${aria || (big + ' ' + small)}">
     <circle cx="70" cy="70" r="52" fill="none" stroke="var(--border)" stroke-width="16"/>
     ${arc}
     <text x="70" y="70" text-anchor="middle" class="ov-donut-big">${big}</text>
@@ -1757,7 +1766,7 @@ function renderOverview(){
   days.forEach(iso => { homeDone += Object.keys((state.home.choreChecks[iso]) || {}).length; });
   const homeTotal = homeDone + pickup.length;
   const homeDonut = homeTotal > 0
-    ? `<div class="ov-donut-center">${ovDonut(homeDone, homeTotal, 'ov-fill-sage', homeDone, 'done · ' + pickup.length + ' waiting')}</div>`
+    ? `<div class="ov-donut-center">${ovDonut(homeDone, homeTotal, 'ov-fill-sage', homeDone, pickup.length + ' waiting', homeDone + ' done, ' + pickup.length + ' waiting')}</div>`
     : '<p class="empty-note">Nothing waiting — home is caught up for now.</p>';
   const maint = (state.home.maintenance || []).slice().sort((a, b) => (b.date < a.date ? -1 : (b.date > a.date ? 1 : 0))).slice(0, 5);
   const maintRows = maint.length ? maint.map(m => `<div class="todo-row"><span class="todo-text">${esc(m.text)}</span><span class="log-meta" style="margin:0">${fmtShort(m.date)}</span></div>`).join('')
@@ -1772,7 +1781,7 @@ function renderOverview(){
   const focusRows = todayFocus.map(f => `
     <div class="todo-row"><span class="todo-text">${esc(f.text) || '—'}</span><span class="log-meta" style="margin:0">${f.done ? 'Done' : 'Still open'}</span></div>`).join('');
   const focusDonut = wkWritten > 0
-    ? `<div class="ov-donut-center">${ovDonut(wkDone, wkWritten, 'ov-fill-gold', wkDone, 'done of ' + wkWritten + ' written')}</div>`
+    ? `<div class="ov-donut-center">${ovDonut(wkDone, wkWritten, 'ov-fill-gold', wkDone, 'of ' + wkWritten + ' written')}</div>`
     : '<p class="empty-note">Nothing written this week yet.</p>';
 
   /* Goals: plain list, no deadlines, no percentages. */
