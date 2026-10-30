@@ -636,8 +636,13 @@ html.demo-off .app{ min-height:100vh; min-height:100dvh }
   letter-spacing:.18em; background:#C7A15C; color:#0B383B; border-radius:999px;
   padding:3px 8px 2px; vertical-align:middle; margin-left:6px;
 }
-@media (max-width:560px){
+@media (max-width:820px){
   #demoBanner{ font-size:10.5px; letter-spacing:.08em; gap:8px }
+  /* 2026-10-30 banner fix, part 3: the long label still truncated with an
+     ellipsis at tablet width 768px, because the short-label swap only
+     applied at <=560px. The swap now applies up to 820px, so tablets get
+     the short "DEMO — try it free" label + short "Etsy →" CTA; desktop
+     (>820px) keeps the full label + long CTA. */
   /* 2026-10-30 banner fix: the long Etsy link (266px) crushed the label to
      58px ("INT…") at 400px. On phones the long link hides, a short CTA
      shows, and the label tail hides — so the label reads in full. */
