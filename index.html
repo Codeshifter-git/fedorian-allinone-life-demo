@@ -26,9 +26,14 @@
   try {
     var DATA_KEY = 'fedorian_adhd_allinone_life_v1';
     var PREFS_KEY = 'fedorian_adhd_allinone_life_prefs_v1';
-    var SESSION_KEY = 'fedorian_allinone_life_demo_session_v1';
+    var SESSION_KEY = 'fedorian_allinone_life_demo_session_v2';
+    var SEED_VERSION = '2';
+    var VERSION_KEY = 'fedorian_allinone_life_demo_seed_version';
+    var storedVersion = null;
+    try { storedVersion = localStorage.getItem(VERSION_KEY); } catch (e) {}
     var newSession = false;
     try { newSession = !sessionStorage.getItem(SESSION_KEY); } catch (e) { newSession = false; }
+    var reseed = newSession || storedVersion !== SEED_VERSION;
     var now = new Date();
     var y = now.getFullYear(), mo = now.getMonth();
     var pad = function(n){ return (n < 10 ? '0' : '') + n; };
@@ -38,9 +43,9 @@
     var clamp = function(s){ return s < MIN ? MIN : (s > MAX ? MAX : s); };
     var off = function(n){ var d = new Date(y, mo, now.getDate()); d.setDate(d.getDate() + n); return clamp(iso(d)); };
     var today = off(0), yday = off(-1);
-    if (newSession) {
+    if (reseed) {
       try { localStorage.removeItem(PREFS_KEY); localStorage.removeItem(DATA_KEY); } catch (e) {}
-      try { sessionStorage.setItem(SESSION_KEY, '1'); } catch (e) {}
+      try { sessionStorage.setItem(SESSION_KEY, '1'); localStorage.setItem(VERSION_KEY, SEED_VERSION); } catch (e) {}
       var days = {};
       days[today] = {
         focus: [{ text: 'Morning walk before screens', done: true }, { text: 'Prep tomorrow\u2019s essentials', done: false }, { text: 'Brain-dump before bed', done: false }],
@@ -48,19 +53,46 @@
         todos: [{ id: 'demo-t1', text: 'Buy milk', done: false }, { id: 'demo-t2', text: 'Water the plants', done: true }],
         notes: '', mood: 4, energy: 3, water: 3, parking: ''
       };
-      var habitChecks = {}; habitChecks[today] = { 'h-walk': true };
       var routineChecks = {}; routineChecks[today] = { morning: { 'r-m1': true }, evening: {}, reset: {} };
-      var sleep = {}, movement = {};
-      movement[today] = [{ id: 'demo-mov-1', text: 'Morning walk', done: true }];
       if (yday !== today) {
         days[yday] = {
           focus: [{ text: 'Tidy desk for 5 minutes', done: true }, { text: 'Call mum', done: true }, { text: '', done: false }],
           schedule: {}, todos: [{ id: 'demo-t3', text: 'Take out recycling', done: true }],
           notes: '', mood: 4, energy: 4, water: 5, parking: ''
         };
-        habitChecks[yday] = { 'h-med': true, 'h-walk': true };
-        sleep[yday] = { bed: '22:30', wake: '07:00', quality: 4 };
       }
+      /* Full displayed-week sample data (Sun..today, clamped to the demo month):
+         the Overview charts read the week, so the seed fills the week — sleep
+         every night so far, habit taps across the days, movement on some days.
+         Future days stay empty (nothing logged yet); month-edge clamping dedupes. */
+      var wkDays = [];
+      { var d0 = new Date(y, mo, now.getDate()); d0.setDate(d0.getDate() - d0.getDay());
+        for (var i = 0; i < 7; i++) { var dd = new Date(d0); dd.setDate(dd.getDate() + i); var s = clamp(iso(dd)); if (s <= today && wkDays.indexOf(s) < 0) wkDays.push(s); } }
+      var wkSleep = [
+        { bed: '22:30', wake: '07:00', quality: 4 },
+        { bed: '23:15', wake: '06:45', quality: 3 },
+        { bed: '22:00', wake: '07:30', quality: 5 },
+        { bed: '00:30', wake: '08:00', quality: 2 },
+        { bed: '23:00', wake: '07:00', quality: 4 },
+        { bed: '22:45', wake: '07:15', quality: 4 },
+        { bed: '23:30', wake: '07:00', quality: 3 }
+      ];
+      var wkHabits = [
+        { 'h-walk': true, 'h-med': true },
+        { 'h-walk': true, 'h-med': true },
+        { 'h-inbox': true },
+        { 'h-med': true },
+        { 'h-med': true, 'h-walk': true },
+        { 'h-walk': true, 'h-med': true, 'h-inbox': true },
+        { 'h-walk': true }
+      ];
+      var wkMove = [true, false, false, true, false, true, false];
+      var habitChecks = {}, sleep = {}, movement = {};
+      wkDays.forEach(function(d, i) {
+        habitChecks[d] = wkHabits[i];
+        sleep[d] = wkSleep[i];
+        if (wkMove[i]) movement[d] = [{ id: 'demo-mov-' + i, text: 'Morning walk', done: true }];
+      });
       var ws = new Date(y, mo, now.getDate()); ws.setDate(ws.getDate() - ws.getDay());
       var weeks = {}; weeks[iso(ws)] = { goal: 'Keep the week gentle', focus: {}, wins: '', letgo: '', next: '' };
       var seed = {
@@ -495,7 +527,7 @@ html[data-appearance="dark"] .ov-fill-teal{fill:#5E8A87}
 html[data-appearance="dark"] .ov-stroke-teal{stroke:#5E8A87}
 .ov-chart-label{font-size:13px;fill:var(--ink)}
 .ov-chart-sub{font-size:12px;fill:var(--ink-soft)}
-.ov-trend{width:100%;height:auto;display:block}
+.ov-trend{width:100%;max-width:560px;height:auto;display:block;margin:0 auto}
 .ov-bar-row{display:grid;grid-template-columns:140px 1fr 86px;gap:10px;align-items:center;padding:7px 0}
 .ov-bar-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ov-bar-count{font-size:13px;color:var(--ink-soft);text-align:right;white-space:nowrap}
@@ -1724,7 +1756,9 @@ function renderOverview(){
     }
   }
 
-  /* Sleep: one quality column per night (height = quality word on a fixed scale, no duration math). */
+  /* Sleep: one quality column per night (height = quality word on a fixed scale, no duration math).
+     Day labels are two lines (name / date) so they can never run together, and the chart
+     is capped by .ov-trend max-width so desktop scale stays proportional. */
   let sleepBody = '';
   {
     const W = 320, BASE = 108, TOP = 18, PITCH = W / 7, BW = 26;
@@ -1733,18 +1767,19 @@ function renderOverview(){
       const dd = parseISO(iso);
       const cx = (i * PITCH + PITCH / 2).toFixed(1);
       const x = (i * PITCH + (PITCH - BW) / 2).toFixed(1);
-      const dayLabel = DOW_SHORT[dd.getDay()] + ' ' + dd.getDate();
+      const dayName = DOW_SHORT[dd.getDay()];
+      const dayNum = String(dd.getDate());
       if (!s || (!s.bed && !s.wake)) {
-        return `<rect x="${x}" y="${BASE - 2}" width="${BW}" height="2" rx="1" fill="var(--border)"/><text x="${cx}" y="${BASE - 8}" text-anchor="middle" class="ov-chart-sub">—</text><text x="${cx}" y="126" text-anchor="middle" class="ov-chart-label">${dayLabel}</text><text x="${cx}" y="144" text-anchor="middle" class="ov-chart-sub">—</text>`;
+        return `<rect x="${x}" y="${BASE - 2}" width="${BW}" height="2" rx="1" fill="var(--border)"/><text x="${cx}" y="${BASE - 8}" text-anchor="middle" class="ov-chart-sub">—</text><text x="${cx}" y="126" text-anchor="middle" class="ov-chart-label">${dayName}</text><text x="${cx}" y="142" text-anchor="middle" class="ov-chart-sub">${dayNum}</text><text x="${cx}" y="158" text-anchor="middle" class="ov-chart-sub">—</text>`;
       }
       const q = s.quality || 0;
       const h = q > 0 ? Math.round(q / 5 * (BASE - TOP)) : 6;
       const y = BASE - h;
       const word = qualityWords[q] || '—';
-      const wake = s.wake ? `<text x="${cx}" y="162" text-anchor="middle" class="ov-chart-sub">${esc(s.wake)}</text>` : '';
-      return `<rect x="${x}" y="${y}" width="${BW}" height="${h}" rx="5" class="ov-fill-gold"/><text x="${cx}" y="${y - 6}" text-anchor="middle" class="ov-chart-label">${word}</text><text x="${cx}" y="126" text-anchor="middle" class="ov-chart-label">${dayLabel}</text><text x="${cx}" y="144" text-anchor="middle" class="ov-chart-sub">${esc(s.bed || '—')}</text>${wake}`;
+      const wake = s.wake ? `<text x="${cx}" y="174" text-anchor="middle" class="ov-chart-sub">${esc(s.wake)}</text>` : '';
+      return `<rect x="${x}" y="${y}" width="${BW}" height="${h}" rx="5" class="ov-fill-gold"/><text x="${cx}" y="${y - 6}" text-anchor="middle" class="ov-chart-label">${word}</text><text x="${cx}" y="126" text-anchor="middle" class="ov-chart-label">${dayName}</text><text x="${cx}" y="142" text-anchor="middle" class="ov-chart-sub">${dayNum}</text><text x="${cx}" y="158" text-anchor="middle" class="ov-chart-sub">${esc(s.bed || '—')}</text>${wake}`;
     }).join('');
-    sleepBody = `<svg class="ov-trend" viewBox="0 0 320 172" role="img" aria-label="Sleep quality per night this week">${cols}</svg>`;
+    sleepBody = `<svg class="ov-trend" viewBox="0 0 320 184" role="img" aria-label="Sleep quality per night this week">${cols}</svg>`;
   }
 
   /* Movement + meds: clean count tiles (no chart — counts read clearest here). */
