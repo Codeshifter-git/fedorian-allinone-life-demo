@@ -479,6 +479,24 @@ html[data-appearance="dark"] .area-label{color:var(--muted-teal)}
 html[data-appearance="dark"] .area-group{border-left-color:var(--border)}
 html[data-appearance="dark"] .pickup-tag{background:var(--gold-soft);color:var(--muted-teal)}
 
+/* ---------- Overview tab: quick-read week view ---------- */
+.ov-bar{display:block;width:100%;height:12px}
+.ov-bar-row{display:grid;grid-template-columns:140px 1fr 86px;gap:10px;align-items:center;padding:6px 0}
+.ov-bar-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ov-bar-count{font-size:13px;color:var(--ink-soft);text-align:right;white-space:nowrap}
+.ov-table{width:100%;border-collapse:collapse;font-size:14px}
+.ov-table th{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-teal);text-align:left;padding:6px 8px 6px 0}
+.ov-table td{padding:7px 8px 7px 0;border-top:1px solid var(--border);vertical-align:top}
+.ov-table-wrap{overflow-x:auto}
+.ov-stat{font-size:15px;font-weight:600;margin-bottom:6px}
+.ov-stat span{font-weight:400;color:var(--ink-soft)}
+@media (max-width:560px){
+  .ov-bar-row{grid-template-columns:104px 1fr 64px;gap:8px}
+  .ov-bar-name{font-size:13.5px}
+  .ov-bar-count{font-size:12px}
+  .ov-table{font-size:13.5px}
+}
+
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
@@ -610,6 +628,7 @@ window.addEventListener('appinstalled', function(){ window.__fedorianInstallProm
     <nav id="mainNav" class="area-nav" aria-label="Planner sections">
       <div class="area-group">
         <span class="area-label">Plan</span>
+        <button class="area-tab" data-action="nav" data-view="overview">Overview</button>
         <button class="area-tab" data-action="nav" data-view="today">Today</button>
         <button class="area-tab" data-action="nav" data-view="calendar">Calendar</button>
         <button class="area-tab" data-action="nav" data-view="planner">Planner</button>
@@ -639,6 +658,7 @@ window.addEventListener('appinstalled', function(){ window.__fedorianInstallProm
   <!-- ============ Views ============ -->
   <main>
     <div class="wrap">
+      <section class="view" id="view-overview"></section>
       <section class="view" id="view-today"></section>
       <section class="view" id="view-calendar"></section>
       <section class="view" id="view-planner"></section>
@@ -970,6 +990,7 @@ let calCursor = (() => { const d = parseISO(clampISO(realToday)); return { y: d.
 let habitCursor = { y: calCursor.y, m: calCursor.m };
 let weekAnchor = clampISO(realToday);
 let healthDate = clampISO(realToday);
+let overviewWeek = realToday;  // normalized to a week start inside renderOverview (weekStartOf needs prefs, which is not initialized yet at declaration time)
 const inboxMoveDates = {};   // inbox item id -> chosen iso date (transient)
 
 /* ---------------- Shared day fragments ---------------- */
@@ -1577,8 +1598,155 @@ function renderJournal(){
 }
 
 
+/* ---------------- View: Overview (quick read) ---------------- */
+function renderOverview(){
+  const el = document.getElementById('view-overview');
+  const start = weekStartOf(overviewWeek);
+  const days = [];
+  for (let i = 0; i < 7; i++) { const d = isoOf(addDays(parseISO(start), i)); if (d >= RANGE_MIN && d <= RANGE_MAX) days.push(d); }
+  if (!days.length) {
+    el.innerHTML = `
+    <div class="view-head">
+      <h1>Overview</h1>
+      <p class="sub">How the week is going, at a glance.</p>
+    </div>
+    <div class="card"><p class="empty-note">Nothing in this week yet.</p></div>`;
+    return;
+  }
+  const end = days[days.length - 1];
+  const todayStart = weekStartOf(realToday);
+  const isCurrentWeek = start === todayStart;
+  const elapsed = days.filter(iso => iso <= realToday).length;
+  const qualityWords = ['', 'Rough', 'Low', 'Okay', 'Good', 'Great'];
+
+  /* Habits: taps this week out of the days gone by (counts only, never grades). */
+  let habitBody = '';
+  if (!state.habits.length) {
+    habitBody = '<p class="empty-note">No habits yet — add one in Habits and it shows up here.</p>';
+  } else {
+    habitBody = state.habits.map(h => {
+      let taps = 0;
+      days.forEach(iso => { if (state.habitChecks[iso] && state.habitChecks[iso][h.id]) taps++; });
+      const pct = elapsed ? Math.round(taps / elapsed * 100) : 0;
+      const count = elapsed ? taps + ' of ' + elapsed + ' days' : 'week ahead';
+      return `
+      <div class="ov-bar-row">
+        <span class="ov-bar-name">${esc(h.name)}</span>
+        <svg class="ov-bar" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="12" rx="6" fill="var(--border)"/><rect x="0" y="0" width="${pct}" height="12" rx="6" fill="var(--sage)"/></svg>
+        <span class="ov-bar-count">${count}</span>
+      </div>`;
+    }).join('');
+  }
+
+  /* Sleep: one row per night of the week, as logged (no duration math). */
+  const sleepRows = days.map(iso => {
+    const s = (state.health && state.health.sleep[iso]) || null;
+    const dd = parseISO(iso);
+    const label = DOW_SHORT[dd.getDay()] + ' ' + dd.getDate();
+    if (!s || (!s.bed && !s.wake)) return `<tr><td>${label}</td><td>—</td><td>—</td></tr>`;
+    const q = s.quality || 0;
+    const qpct = q ? Math.round(q / 5 * 100) : 0;
+    return `<tr><td>${label}</td><td>${esc(s.bed || '?')} → ${esc(s.wake || '?')}</td><td><svg class="ov-bar" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="12" rx="6" fill="var(--border)"/><rect x="0" y="0" width="${qpct}" height="12" rx="6" fill="var(--gold)"/></svg> ${qualityWords[q] || ''}</td></tr>`;
+  }).join('');
+
+  /* Movement + meds: plain counts for the week. */
+  let mvLogged = 0, mvDone = 0, medChecks = 0;
+  days.forEach(iso => {
+    ((state.health && state.health.movement[iso]) || []).forEach(m => { mvLogged++; if (m.done) mvDone++; });
+    medChecks += Object.keys(((state.health && state.health.medChecks) || {})[iso] || {}).length;
+  });
+  const medCount = (state.health && state.health.meds) ? state.health.meds.length : 0;
+
+  /* Home: Pick It Back Up uses the Home rule on real today/yesterday. */
+  const yest = isoOf(addDays(parseISO(realToday), -1));
+  const tChecks = (state.home.choreChecks[realToday]) || {};
+  const yChecks = (state.home.choreChecks[yest]) || {};
+  const pickup = (state.home.chores || []).filter(c => c.created <= yest && !yChecks[c.id] && !tChecks[c.id]);
+  const pickupRows = pickup.length ? pickup.map(c => `<tr><td>${esc(c.text)}</td><td>${esc(c.freq)}</td></tr>`).join('')
+    : '<tr><td colspan="2">Nothing waiting — home is caught up for now.</td></tr>';
+  const maint = (state.home.maintenance || []).slice().sort((a, b) => (b.date < a.date ? -1 : (b.date > a.date ? 1 : 0))).slice(0, 5);
+  const maintRows = maint.length ? maint.map(m => `<div class="todo-row"><span class="todo-text">${esc(m.text)}</span><span class="log-meta" style="margin:0">${fmtShort(m.date)}</span></div>`).join('')
+    : '<p class="empty-note">Nothing logged yet — filters, bulbs, batteries, that one squeaky hinge.</p>';
+
+  /* Focus: today as written, plus the week's written/done counts. */
+  const todayFocus = getDay(realToday).focus;
+  let wkWritten = 0, wkDone = 0;
+  days.forEach(iso => {
+    getDay(iso).focus.forEach(f => { if (f.text && f.text.trim()) { wkWritten++; if (f.done) wkDone++; } });
+  });
+  const focusRows = todayFocus.map(f => `
+    <div class="todo-row"><span class="todo-text">${esc(f.text) || '—'}</span><span class="log-meta" style="margin:0">${f.done ? 'Done' : 'Still open'}</span></div>`).join('');
+
+  /* Goals: plain list, no deadlines, no percentages. */
+  const goalRows = state.goals.length ? state.goals.map(g => `
+    <div class="todo-row"><span class="todo-text">${esc(g.text)}</span><span class="log-meta" style="margin:0">${g.done ? 'Done' : 'Still open'}</span></div>`).join('')
+    : '<p class="empty-note">No goals yet. Small ones count double.</p>';
+
+  /* Gentle whole-view empty state: only when the week holds no logged life at all. */
+  const hasAny = state.habits.some(h => days.some(iso => state.habitChecks[iso] && state.habitChecks[iso][h.id]))
+    || days.some(iso => { const s = state.health && state.health.sleep[iso]; return s && (s.bed || s.wake); })
+    || mvLogged > 0 || medChecks > 0 || wkWritten > 0 || pickup.length > 0 || maint.length > 0 || state.goals.length > 0;
+  const emptyBanner = hasAny ? '' : `<div class="card"><p class="empty-note">Nothing logged yet — tap a habit, log a night's sleep, or tick a chore and it shows up here.</p></div>`;
+
+  el.innerHTML = `
+    <div class="view-head">
+      <h1>Overview</h1>
+      <p class="sub">How the week is going, at a glance — counts only, never grades.</p>
+    </div>
+    <div class="date-nav">
+      <button class="btn ghost" data-action="overview-prev">← Prev week</button>
+      <span class="date-label">${fmtShort(days[0])} — ${fmtShort(end)}</span>
+      <button class="btn ghost" data-action="overview-next" ${isCurrentWeek ? 'disabled' : ''}>Next week →</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" data-action="overview-this">This week</button>
+    </div>
+    ${emptyBanner}
+    <div class="card">
+      <h2>Habits this week</h2>
+      <p class="hint">Taps so far this week, out of the days gone by. Missed days are just empty space, not failure.</p>
+      ${habitBody}
+    </div>
+    <div class="card">
+      <h2>Sleep</h2>
+      <p class="hint">Nights as logged — times and a feeling, nothing computed from them.</p>
+      <div class="ov-table-wrap"><table class="ov-table">
+        <thead><tr><th>Night</th><th>Bed → Wake</th><th>Quality</th></tr></thead>
+        <tbody>${sleepRows}</tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Movement &amp; meds</h2>
+      <p class="hint">Plain counts for the week.</p>
+      <p class="ov-stat">Movement: ${mvDone} done of ${mvLogged} logged</p>
+      <p class="ov-stat">Meds: ${medChecks} check-ins <span>(${medCount} listed)</span></p>
+    </div>
+    <div class="card">
+      <h2>Home at a glance</h2>
+      <p class="hint">Chores waiting for a Pick It Back Up, plus the latest upkeep.</p>
+      <div class="ov-table-wrap"><table class="ov-table">
+        <thead><tr><th>Waiting chore</th><th>Rhythm</th></tr></thead>
+        <tbody>${pickupRows}</tbody>
+      </table></div>
+      <h3 style="margin-top:14px">Latest upkeep</h3>
+      ${maintRows}
+    </div>
+    <div class="card">
+      <h2>Focus</h2>
+      <p class="hint">Today's Top 3, and how many of the week's written focuses are done.</p>
+      ${focusRows}
+      <p class="ov-stat" style="margin-top:12px">This week: ${wkDone} done of ${wkWritten} written</p>
+    </div>
+    <div class="card">
+      <h2>Goals</h2>
+      <p class="hint">Things you'd like, not things you owe.</p>
+      ${goalRows}
+    </div>`;
+}
+
+
 /* ---------------- Navigation & rendering ---------------- */
 const RENDERERS = {
+  overview: renderOverview,
   today: renderToday,
   calendar: renderCalendar,
   planner: renderPlanner,
@@ -2116,6 +2284,20 @@ document.addEventListener('click', function(e){
       break;
     }
 
+    /* Overview week navigation (buttons only — no dropdowns) */
+    case 'overview-prev':
+      overviewWeek = clampISO(isoOf(addDays(parseISO(weekStartOf(overviewWeek)), -7)));
+      renderOverview();
+      break;
+    case 'overview-next':
+      overviewWeek = clampISO(isoOf(addDays(parseISO(weekStartOf(overviewWeek)), 7)));
+      renderOverview();
+      break;
+    case 'overview-this':
+      overviewWeek = weekStartOf(realToday);
+      renderOverview();
+      break;
+
     /* Preferences (separate prefs key; planner data untouched) */
     case 'pref-theme':
       if (PREF_THEMES.includes(el.dataset.theme)) { prefs.theme = el.dataset.theme; savePrefs(); applyPrefs(); }
@@ -2145,6 +2327,7 @@ document.addEventListener('click', function(e){
         pruneDemoState();
         plannerDate = clampISO(realToday);
         healthDate = clampISO(realToday);
+        overviewWeek = weekStartOf(realToday);
         weekAnchor = clampISO(realToday);
         calCursor = { y: parseISO(plannerDate).getFullYear(), m: parseISO(plannerDate).getMonth() };
         habitCursor = { y: calCursor.y, m: calCursor.m };
