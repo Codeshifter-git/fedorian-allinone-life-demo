@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
 <meta name="theme-color" content="#0B383B">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script>
@@ -503,6 +504,28 @@ html[data-appearance="dark"] .pickup-tag{background:var(--gold-soft);color:var(-
   input,textarea,select{font-size:16px}
   .sched-row input,.habit-name-input,.note-body,.inbox-actions input[type="date"]{font-size:16px}
 }
+
+.habit-scroll-hint{display:none;font-size:12.5px;color:var(--ink-soft);margin-top:8px}
+@media (max-width:560px){
+  /* Habits month grid on phones (2026-10-30 fix): the 172px sticky name
+     column + 36px day cells left only ~3 day columns visible in a ~338px
+     window, with the next day clipped mid-cell and no scroll cue. The
+     scroller itself works (scrollWidth 1517 vs clientWidth 338) — this
+     makes it usable: narrower columns, a right-edge fade showing there
+     is more, and a hint line (added to the Habits template below). */
+  table.habit-table th.habit-name-col,table.habit-table td.habit-name-cell{min-width:118px}
+  .habit-cell{width:30px;height:30px;border-radius:8px}
+  table.habit-table{border-spacing:3px}
+  /* The name column's width is driven by the rename input's intrinsic
+     width (~270px at 16px font), not by the cell min-width — so cap the
+     input itself, otherwise the column eats the whole phone window. */
+  .habit-name-input{width:108px;flex:none}
+  .habit-scroll{
+    -webkit-mask-image:linear-gradient(to right,black calc(100% - 34px),transparent);
+    mask-image:linear-gradient(to right,black calc(100% - 34px),transparent);
+  }
+  .habit-scroll-hint{display:block}
+}
 </style>
 <style>
 /* ============================================================
@@ -519,6 +542,7 @@ html[data-appearance="dark"] .pickup-tag{background:var(--gold-soft);color:var(-
 #demoBanner .demo-label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
 #demoBanner a{ color:#C7A15C; text-decoration:none; font-weight:800; white-space:nowrap; letter-spacing:.1em }
 #demoBanner a:hover{ text-decoration:underline }
+#demoBanner a.demo-cta-short{ display:none }
 #demoBanner .demo-x{
   position:absolute; right:8px; top:50%; transform:translateY(-50%);
   background:transparent; border:none; color:rgba(247,243,236,.75);
@@ -539,6 +563,12 @@ html.demo-off .app{ min-height:100vh; min-height:100dvh }
 }
 @media (max-width:560px){
   #demoBanner{ font-size:10.5px; letter-spacing:.08em; gap:8px }
+  /* 2026-10-30 banner fix: the long Etsy link (266px) crushed the label to
+     58px ("INT…") at 400px. On phones the long link hides, a short CTA
+     shows, and the label tail hides — so the label reads in full. */
+  #demoBanner a.demo-cta-long{ display:none }
+  #demoBanner a.demo-cta-short{ display:inline }
+  #demoBanner .demo-label-tail{ display:none }
 }
 </style>
 <script>
@@ -554,8 +584,9 @@ window.addEventListener('appinstalled', function(){ window.__fedorianInstallProm
 </head>
 <body>
 <div id="demoBanner" role="note">
-  <span class="demo-label">INTERACTIVE DEMO — try the demo month free · Full version: Jan 2026 – Dec 2027</span>
-  <a href="https://www.etsy.com/shop/FedorianStudio" target="_blank" rel="noopener">Get the full all-in-one life planner on Etsy →</a>
+  <span class="demo-label">INTERACTIVE DEMO — try the demo month free<span class="demo-label-tail"> · Full version: Jan 2026 – Dec 2027</span></span>
+  <a class="demo-cta-long" href="https://www.etsy.com/shop/FedorianStudio" target="_blank" rel="noopener">Get the full all-in-one life planner on Etsy →</a>
+  <a class="demo-cta-short" href="https://www.etsy.com/shop/FedorianStudio" target="_blank" rel="noopener">Etsy →</a>
   <button class="demo-x" id="demoBannerX" type="button" aria-label="Dismiss demo banner">×</button>
 </div>
 <script>
@@ -1303,6 +1334,7 @@ function renderHabits(){
         <table class="habit-table"><thead>${head}</thead><tbody>${bodyRows}</tbody></table>
       </div>
       <p class="habit-count"><strong>${monthTotal}</strong> check-ins logged in ${MONTH_NAMES[m]} — every single one counts.${state.habits.length >= 8 ? ' (Maximum of 8 habits — small lists get done.)' : ''}</p>
+      <p class="habit-scroll-hint">Swipe sideways to see the whole month →</p>
       <p class="hint" style="margin-top:6px">Tip: tap a habit’s name to rename it. Fewer, kinder habits beat a long list you avoid.</p>
     </div>`;
 }
