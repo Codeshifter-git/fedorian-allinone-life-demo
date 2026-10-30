@@ -479,23 +479,47 @@ html[data-appearance="dark"] .area-label{color:var(--muted-teal)}
 html[data-appearance="dark"] .area-group{border-left-color:var(--border)}
 html[data-appearance="dark"] .pickup-tag{background:var(--gold-soft);color:var(--muted-teal)}
 
-/* ---------- Overview tab: quick-read week view ---------- */
-.ov-bar{display:block;width:100%;height:12px}
-.ov-bar-row{display:grid;grid-template-columns:140px 1fr 86px;gap:10px;align-items:center;padding:6px 0}
+/* ---------- Overview tab: quick-read week view (v2 charts) ---------- */
+.ov-donut{width:150px;height:150px;flex:none}
+.ov-donut-big{font-size:23px;font-weight:800;fill:var(--ink)}
+.ov-donut-small{font-size:12px;fill:var(--ink-soft)}
+.ov-donut-center{display:flex;justify-content:center;padding:6px 0 2px}
+.ov-donut-note{font-size:14px;color:var(--ink-soft);text-align:center}
+.ov-fill-teal{fill:var(--teal)}
+.ov-fill-gold{fill:var(--gold)}
+.ov-fill-sage{fill:var(--sage)}
+html[data-appearance="dark"] .ov-fill-teal{fill:#5E8A87}
+.ov-stroke-teal{stroke:var(--teal)}
+.ov-stroke-gold{stroke:var(--gold)}
+.ov-stroke-sage{stroke:var(--sage)}
+html[data-appearance="dark"] .ov-stroke-teal{stroke:#5E8A87}
+.ov-chart-label{font-size:13px;fill:var(--ink)}
+.ov-chart-sub{font-size:12px;fill:var(--ink-soft)}
+.ov-trend{width:100%;height:auto;display:block}
+.ov-bar-row{display:grid;grid-template-columns:140px 1fr 86px;gap:10px;align-items:center;padding:7px 0}
 .ov-bar-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ov-bar-count{font-size:13px;color:var(--ink-soft);text-align:right;white-space:nowrap}
+.ov-bar-svg{display:block;width:100%;height:16px}
 .ov-table{width:100%;border-collapse:collapse;font-size:14px}
 .ov-table th{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-teal);text-align:left;padding:6px 8px 6px 0}
 .ov-table td{padding:7px 8px 7px 0;border-top:1px solid var(--border);vertical-align:top}
 .ov-table-wrap{overflow-x:auto}
 .ov-stat{font-size:15px;font-weight:600;margin-bottom:6px}
 .ov-stat span{font-weight:400;color:var(--ink-soft)}
+.ov-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ov-tile{background:var(--gold-soft);border-radius:12px;padding:14px}
+.ov-tile-num{font-size:28px;font-weight:800;color:var(--teal);line-height:1.1}
+.ov-tile-label{font-size:13px;color:var(--ink-soft);margin-top:4px}
+html[data-appearance="dark"] .ov-tile-num{color:var(--gold)}
 @media (max-width:560px){
   .ov-bar-row{grid-template-columns:104px 1fr 64px;gap:8px}
   .ov-bar-name{font-size:13.5px}
   .ov-bar-count{font-size:12px}
   .ov-table{font-size:13.5px}
+  .ov-tiles{grid-template-columns:1fr}
+  .ov-donut{width:132px;height:132px}
 }
+
 
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce){
@@ -1599,6 +1623,20 @@ function renderJournal(){
 
 
 /* ---------------- View: Overview (quick read) ---------------- */
+function ovDonut(done, total, fillClass, big, small){
+  const C = 326.73;
+  const pct = total > 0 ? done / total : 0;
+  const filled = (pct * C).toFixed(1);
+  const strokeClass = fillClass.replace('ov-fill-', 'ov-stroke-');
+  const arc = pct > 0 ? `<circle cx="70" cy="70" r="52" fill="none" class="${strokeClass}" stroke-width="16" stroke-dasharray="${filled} ${C}" transform="rotate(-90 70 70)" stroke-linecap="round"/>` : '';
+  return `<svg class="ov-donut" viewBox="0 0 140 140" role="img" aria-label="${big} ${small}">
+    <circle cx="70" cy="70" r="52" fill="none" stroke="var(--border)" stroke-width="16"/>
+    ${arc}
+    <text x="70" y="70" text-anchor="middle" class="ov-donut-big">${big}</text>
+    <text x="70" y="89" text-anchor="middle" class="ov-donut-small">${small}</text>
+  </svg>`;
+}
+
 function renderOverview(){
   const el = document.getElementById('view-overview');
   const start = weekStartOf(overviewWeek);
@@ -1619,37 +1657,88 @@ function renderOverview(){
   const elapsed = days.filter(iso => iso <= realToday).length;
   const qualityWords = ['', 'Rough', 'Low', 'Okay', 'Good', 'Great'];
 
-  /* Habits: taps this week out of the days gone by (counts only, never grades). */
+  /* Habits: restyled bars + a donut for all habits together (counts only). */
   let habitBody = '';
+  let habitDonut = '';
   if (!state.habits.length) {
     habitBody = '<p class="empty-note">No habits yet — add one in Habits and it shows up here.</p>';
   } else {
-    habitBody = state.habits.map(h => {
+    let totalTaps = 0;
+    const rows = state.habits.map(h => {
       let taps = 0;
       days.forEach(iso => { if (state.habitChecks[iso] && state.habitChecks[iso][h.id]) taps++; });
+      totalTaps += taps;
       const pct = elapsed ? Math.round(taps / elapsed * 100) : 0;
       const count = elapsed ? taps + ' of ' + elapsed + ' days' : 'week ahead';
       return `
       <div class="ov-bar-row">
         <span class="ov-bar-name">${esc(h.name)}</span>
-        <svg class="ov-bar" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="12" rx="6" fill="var(--border)"/><rect x="0" y="0" width="${pct}" height="12" rx="6" fill="var(--sage)"/></svg>
+        <svg class="ov-bar-svg" viewBox="0 0 100 16" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="16" rx="8" fill="var(--border)"/><rect x="0" y="0" width="${pct}" height="16" rx="8" class="ov-fill-teal"/></svg>
         <span class="ov-bar-count">${count}</span>
       </div>`;
     }).join('');
+    const possible = state.habits.length * elapsed;
+    habitDonut = `<div class="ov-donut-center">${ovDonut(totalTaps, possible, 'ov-fill-teal', totalTaps, 'of ' + possible + ' taps')}</div>`;
+    habitBody = rows;
   }
 
-  /* Sleep: one row per night of the week, as logged (no duration math). */
-  const sleepRows = days.map(iso => {
-    const s = (state.health && state.health.sleep[iso]) || null;
-    const dd = parseISO(iso);
-    const label = DOW_SHORT[dd.getDay()] + ' ' + dd.getDate();
-    if (!s || (!s.bed && !s.wake)) return `<tr><td>${label}</td><td>—</td><td>—</td></tr>`;
-    const q = s.quality || 0;
-    const qpct = q ? Math.round(q / 5 * 100) : 0;
-    return `<tr><td>${label}</td><td>${esc(s.bed || '?')} → ${esc(s.wake || '?')}</td><td><svg class="ov-bar" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="12" rx="6" fill="var(--border)"/><rect x="0" y="0" width="${qpct}" height="12" rx="6" fill="var(--gold)"/></svg> ${qualityWords[q] || ''}</td></tr>`;
-  }).join('');
+  /* Through the week: habit taps per day as columns, gold dot = movement logged. */
+  let trendBody = '';
+  {
+    let maxTaps = 0;
+    const perDay = days.map(iso => {
+      let taps = 0;
+      state.habits.forEach(h => { if (state.habitChecks[iso] && state.habitChecks[iso][h.id]) taps++; });
+      const mv = ((state.health && state.health.movement[iso]) || []).some(m => m.done);
+      if (taps > maxTaps) maxTaps = taps;
+      return { iso, taps, mv };
+    });
+    const anyTaps = maxTaps > 0;
+    if (!anyTaps) {
+      trendBody = '<p class="empty-note">No taps this week yet — tap a habit and the week fills in here.</p>';
+    } else {
+      const W = 320, BASE = 118, TOP = 18, PITCH = W / 7, BW = 26;
+      const cols = perDay.map((d, i) => {
+        const h = Math.round(d.taps / maxTaps * (BASE - TOP));
+        const x = (i * PITCH + (PITCH - BW) / 2).toFixed(1);
+        const y = BASE - h;
+        const dd = parseISO(d.iso);
+        const val = d.taps > 0 ? `<text x="${(i * PITCH + PITCH / 2).toFixed(1)}" y="${y - 6}" text-anchor="middle" class="ov-chart-label">${d.taps}</text>` : '';
+        const bar = h > 0
+          ? `<rect x="${x}" y="${y}" width="${BW}" height="${h}" rx="5" class="ov-fill-teal"/>`
+          : `<rect x="${x}" y="${BASE - 3}" width="${BW}" height="3" rx="1.5" fill="var(--border)"/>`;
+        const dot = d.mv ? `<circle cx="${(i * PITCH + PITCH / 2).toFixed(1)}" cy="150" r="4.5" class="ov-fill-gold"/>` : '';
+        return `${val}${bar}<text x="${(i * PITCH + PITCH / 2).toFixed(1)}" y="136" text-anchor="middle" class="ov-chart-label">${DOW_SHORT[dd.getDay()]}</text>${dot}`;
+      }).join('');
+      trendBody = `<svg class="ov-trend" viewBox="0 0 320 160" role="img" aria-label="Habit taps per day this week">${cols}</svg>
+      <p class="hint" style="margin-top:6px">A gold dot under a day means movement was logged that day.</p>`;
+    }
+  }
 
-  /* Movement + meds: plain counts for the week. */
+  /* Sleep: one quality column per night (height = quality word on a fixed scale, no duration math). */
+  let sleepBody = '';
+  {
+    const W = 320, BASE = 108, TOP = 18, PITCH = W / 7, BW = 26;
+    const cols = days.map((iso, i) => {
+      const s = (state.health && state.health.sleep[iso]) || null;
+      const dd = parseISO(iso);
+      const cx = (i * PITCH + PITCH / 2).toFixed(1);
+      const x = (i * PITCH + (PITCH - BW) / 2).toFixed(1);
+      const dayLabel = DOW_SHORT[dd.getDay()] + ' ' + dd.getDate();
+      if (!s || (!s.bed && !s.wake)) {
+        return `<rect x="${x}" y="${BASE - 2}" width="${BW}" height="2" rx="1" fill="var(--border)"/><text x="${cx}" y="${BASE - 8}" text-anchor="middle" class="ov-chart-sub">—</text><text x="${cx}" y="126" text-anchor="middle" class="ov-chart-label">${dayLabel}</text><text x="${cx}" y="144" text-anchor="middle" class="ov-chart-sub">—</text>`;
+      }
+      const q = s.quality || 0;
+      const h = q > 0 ? Math.round(q / 5 * (BASE - TOP)) : 6;
+      const y = BASE - h;
+      const word = qualityWords[q] || '—';
+      const wake = s.wake ? `<text x="${cx}" y="162" text-anchor="middle" class="ov-chart-sub">${esc(s.wake)}</text>` : '';
+      return `<rect x="${x}" y="${y}" width="${BW}" height="${h}" rx="5" class="ov-fill-gold"/><text x="${cx}" y="${y - 6}" text-anchor="middle" class="ov-chart-label">${word}</text><text x="${cx}" y="126" text-anchor="middle" class="ov-chart-label">${dayLabel}</text><text x="${cx}" y="144" text-anchor="middle" class="ov-chart-sub">${esc(s.bed || '—')}</text>${wake}`;
+    }).join('');
+    sleepBody = `<svg class="ov-trend" viewBox="0 0 320 172" role="img" aria-label="Sleep quality per night this week">${cols}</svg>`;
+  }
+
+  /* Movement + meds: clean count tiles (no chart — counts read clearest here). */
   let mvLogged = 0, mvDone = 0, medChecks = 0;
   days.forEach(iso => {
     ((state.health && state.health.movement[iso]) || []).forEach(m => { mvLogged++; if (m.done) mvDone++; });
@@ -1657,18 +1746,24 @@ function renderOverview(){
   });
   const medCount = (state.health && state.health.meds) ? state.health.meds.length : 0;
 
-  /* Home: Pick It Back Up uses the Home rule on real today/yesterday. */
+  /* Home: Pick It Back Up uses the Home rule on real today/yesterday, plus a done-vs-open donut. */
   const yest = isoOf(addDays(parseISO(realToday), -1));
   const tChecks = (state.home.choreChecks[realToday]) || {};
   const yChecks = (state.home.choreChecks[yest]) || {};
   const pickup = (state.home.chores || []).filter(c => c.created <= yest && !yChecks[c.id] && !tChecks[c.id]);
   const pickupRows = pickup.length ? pickup.map(c => `<tr><td>${esc(c.text)}</td><td>${esc(c.freq)}</td></tr>`).join('')
     : '<tr><td colspan="2">Nothing waiting — home is caught up for now.</td></tr>';
+  let homeDone = 0;
+  days.forEach(iso => { homeDone += Object.keys((state.home.choreChecks[iso]) || {}).length; });
+  const homeTotal = homeDone + pickup.length;
+  const homeDonut = homeTotal > 0
+    ? `<div class="ov-donut-center">${ovDonut(homeDone, homeTotal, 'ov-fill-sage', homeDone, 'done · ' + pickup.length + ' waiting')}</div>`
+    : '<p class="empty-note">Nothing waiting — home is caught up for now.</p>';
   const maint = (state.home.maintenance || []).slice().sort((a, b) => (b.date < a.date ? -1 : (b.date > a.date ? 1 : 0))).slice(0, 5);
   const maintRows = maint.length ? maint.map(m => `<div class="todo-row"><span class="todo-text">${esc(m.text)}</span><span class="log-meta" style="margin:0">${fmtShort(m.date)}</span></div>`).join('')
     : '<p class="empty-note">Nothing logged yet — filters, bulbs, batteries, that one squeaky hinge.</p>';
 
-  /* Focus: today as written, plus the week's written/done counts. */
+  /* Focus: today as written, plus the week's written/done counts and a donut. */
   const todayFocus = getDay(realToday).focus;
   let wkWritten = 0, wkDone = 0;
   days.forEach(iso => {
@@ -1676,6 +1771,9 @@ function renderOverview(){
   });
   const focusRows = todayFocus.map(f => `
     <div class="todo-row"><span class="todo-text">${esc(f.text) || '—'}</span><span class="log-meta" style="margin:0">${f.done ? 'Done' : 'Still open'}</span></div>`).join('');
+  const focusDonut = wkWritten > 0
+    ? `<div class="ov-donut-center">${ovDonut(wkDone, wkWritten, 'ov-fill-gold', wkDone, 'done of ' + wkWritten + ' written')}</div>`
+    : '<p class="empty-note">Nothing written this week yet.</p>';
 
   /* Goals: plain list, no deadlines, no percentages. */
   const goalRows = state.goals.length ? state.goals.map(g => `
@@ -1704,25 +1802,31 @@ function renderOverview(){
     <div class="card">
       <h2>Habits this week</h2>
       <p class="hint">Taps so far this week, out of the days gone by. Missed days are just empty space, not failure.</p>
+      ${habitDonut}
       ${habitBody}
+    </div>
+    <div class="card">
+      <h2>Through the week</h2>
+      <p class="hint">Habit taps per day.</p>
+      ${trendBody}
     </div>
     <div class="card">
       <h2>Sleep</h2>
       <p class="hint">Nights as logged — times and a feeling, nothing computed from them.</p>
-      <div class="ov-table-wrap"><table class="ov-table">
-        <thead><tr><th>Night</th><th>Bed → Wake</th><th>Quality</th></tr></thead>
-        <tbody>${sleepRows}</tbody>
-      </table></div>
+      ${sleepBody}
     </div>
     <div class="card">
       <h2>Movement &amp; meds</h2>
       <p class="hint">Plain counts for the week.</p>
-      <p class="ov-stat">Movement: ${mvDone} done of ${mvLogged} logged</p>
-      <p class="ov-stat">Meds: ${medChecks} check-ins <span>(${medCount} listed)</span></p>
+      <div class="ov-tiles">
+        <div class="ov-tile"><div class="ov-tile-num">${mvDone}</div><div class="ov-tile-label">movement done of ${mvLogged} logged</div></div>
+        <div class="ov-tile"><div class="ov-tile-num">${medChecks}</div><div class="ov-tile-label">med check-ins (${medCount} listed)</div></div>
+      </div>
     </div>
     <div class="card">
       <h2>Home at a glance</h2>
-      <p class="hint">Chores waiting for a Pick It Back Up, plus the latest upkeep.</p>
+      <p class="hint">Chores done vs waiting this week — the Pick It Back Up list — plus the latest upkeep.</p>
+      ${homeDonut}
       <div class="ov-table-wrap"><table class="ov-table">
         <thead><tr><th>Waiting chore</th><th>Rhythm</th></tr></thead>
         <tbody>${pickupRows}</tbody>
@@ -1734,6 +1838,7 @@ function renderOverview(){
       <h2>Focus</h2>
       <p class="hint">Today's Top 3, and how many of the week's written focuses are done.</p>
       ${focusRows}
+      ${focusDonut}
       <p class="ov-stat" style="margin-top:12px">This week: ${wkDone} done of ${wkWritten} written</p>
     </div>
     <div class="card">
@@ -1742,6 +1847,7 @@ function renderOverview(){
       ${goalRows}
     </div>`;
 }
+
 
 
 /* ---------------- Navigation & rendering ---------------- */
